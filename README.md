@@ -52,6 +52,10 @@ npm run preview
 
 This repository includes a GitHub Actions workflow at [.github/workflows/deploy.yml](.github/workflows/deploy.yml) that builds and deploys the app to GitHub Pages.
 
+For this repository (`vaslabs/thumbnail-lab`), the published site URL is:
+
+- https://vaslabs.github.io/thumbnail-lab/
+
 ### One-time GitHub setup
 
 1. Go to your repository Settings.
@@ -59,6 +63,8 @@ This repository includes a GitHub Actions workflow at [.github/workflows/deploy.
 3. Set Source to GitHub Actions.
 
 After that, each push to `main` or `master` triggers deployment automatically.
+
+The workflow automatically builds with the correct Vite base path for this repo (`/thumbnail-lab/`).
 
 ## Implementation Highlights
 
