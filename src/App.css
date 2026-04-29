@@ -96,9 +96,46 @@ h1 {
   font-weight: 700;
 }
 
-.control input {
+.control input[type="range"] {
   grid-column: 1 / -1;
   width: 100%;
+}
+
+.mode-control {
+  border: 0;
+  padding: 0;
+  margin: 24px 0;
+  min-width: 0;
+}
+
+.mode-control > span {
+  grid-column: 1 / -1;
+  display: block;
+}
+
+.mode-control label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mode-control label + label {
+  margin-left: 14px;
+}
+
+.mode-control input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #4f46e5;
+}
+
+.mode-control small {
+  grid-column: 1 / -1;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 button {

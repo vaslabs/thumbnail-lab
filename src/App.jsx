@@ -16,6 +16,7 @@ export default function App() {
   const generationRef = useRef(0);
   const ffmpegListenersAttachedRef = useRef(false);
   const [file, setFile] = useState(null);
+  const [engine, setEngine] = useState("canvas");
   const [count, setCount] = useState(12);
   const [qualityPercent, setQualityPercent] = useState(DEFAULT_QUALITY_PERCENT);
   const [status, setStatus] = useState("Drop a video to begin");
@@ -342,9 +343,6 @@ export default function App() {
     clearThumbs();
 
     try {
-      await loadFFmpeg();
-      debug(runId, "ffmpeg:loaded", { loaded: ffmpeg.loaded });
-
       const duration = await getDuration(file);
       const ext = file.name.split(".").pop() || "mp4";
       const inputName = `input.${ext}`;
@@ -353,9 +351,14 @@ export default function App() {
       let nextThumbs = [];
       let zip = null;
 
-      try {
+      if (engine === "canvas") {
+        setStatus("Extracting thumbnails with Canvas...");
+        ({ nextThumbs, zip } = await extractWithCanvas(file, duration, runId));
+      } else {
         setStatus("Reading video...");
         debug(runId, "video:write:start", { inputName });
+        await loadFFmpeg();
+        debug(runId, "ffmpeg:loaded", { loaded: ffmpeg.loaded });
         await ffmpeg.writeFile(inputName, await fetchFile(file));
         debug(runId, "video:write:done", { inputName });
 
@@ -375,15 +378,6 @@ export default function App() {
         }
 
         ({ nextThumbs, zip } = await readThumbsAndZip(outputNames, runId));
-      } catch (error) {
-        debug(runId, "extract:ffmpeg:error", {
-          message: String(error?.message ?? error),
-        });
-        if (!isMemoryFailure(error)) throw error;
-
-        setStatus("FFmpeg memory limit hit. Switching to browser capture...");
-        ({ nextThumbs, zip } = await extractWithCanvas(file, duration, runId));
-      } finally {
         await safeDelete(inputName);
       }
 
@@ -438,6 +432,37 @@ export default function App() {
             as a ZIP.
           </p>
         </div>
+
+        <fieldset className="control mode-control">
+          <span>Extraction mode</span>
+          <label>
+            <input
+              type="radio"
+              name="engine"
+              value="canvas"
+              checked={engine === "canvas"}
+              onChange={(e) => setEngine(e.target.value)}
+            />
+            Canvas (recommended)
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="engine"
+              value="ffmpeg"
+              checked={engine === "ffmpeg"}
+              onChange={(e) => setEngine(e.target.value)}
+            />
+            FFmpeg
+          </label>
+          {engine === "ffmpeg" && (
+            <small>
+              FFmpeg in the browser can run out of memory on large or
+              high-bitrate videos. Switch to Canvas mode for better
+              reliability.
+            </small>
+          )}
+        </fieldset>
 
         <div
           className="dropzone"

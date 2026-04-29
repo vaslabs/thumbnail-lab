@@ -8,6 +8,8 @@ This app is built with React + Vite and runs fully client-side. You can drag and
 
 - Drag-and-drop or file picker video upload
 - Adjustable thumbnail count (slider)
+- Adjustable quality percentage (40% to 100%)
+- Extraction mode selector (Canvas or FFmpeg)
 - Thumbnail preview grid with per-image download
 - ZIP download of all generated thumbnails
 - Fully client-side processing (no backend)
@@ -19,6 +21,10 @@ This app is built with React + Vite and runs fully client-side. You can drag and
 - `@ffmpeg/ffmpeg` + `@ffmpeg/core` (WebAssembly processing)
 - Canvas-based browser capture fallback
 - JSZip
+
+## Attribution
+
+Most of this project implementation was produced with GitHub Copilot assistance (GPT-5.3-Codex), then iterated and validated in this repository.
 
 ## Local Setup
 
@@ -83,11 +89,13 @@ Large videos can hit browser WASM memory limits. To improve reliability, extract
 
 1. Bulk FFmpeg extraction
 2. Sequential FFmpeg extraction (single frame per command)
-3. Canvas fallback if FFmpeg still fails with memory errors
+3. Browser-native Canvas extraction
+
+The UI defaults to Canvas mode because it is more stable across large or high-bitrate uploads.
 
 ### 3. Canvas fallback (browser-native)
 
-When FFmpeg cannot proceed due to memory constraints, the app switches to browser media APIs:
+Canvas mode uses browser media APIs directly:
 
 - Seeks an HTML video element to target timestamps
 - Draws frames to canvas
@@ -95,6 +103,8 @@ When FFmpeg cannot proceed due to memory constraints, the app switches to browse
 - Adds blobs to ZIP and preview grid
 
 This keeps the tool functional even for heavier inputs where FFmpeg WASM may fail.
+
+If you switch to FFmpeg mode, note that browser memory limits may still cause extraction failures on bigger files.
 
 ### 4. Runtime diagnostics
 
