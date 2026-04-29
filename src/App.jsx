@@ -390,7 +390,7 @@ export default function App() {
 
       const a = document.createElement("a");
       a.href = zipUrl;
-      a.download = `${file.name.replace(/\.[^/.]+$/, "")}-thumbnails.zip`;
+      a.download = `${file.name.replace(/\.[^/.]+$/, "")}_thumbnails.zip`;
       a.click();
 
       URL.revokeObjectURL(zipUrl);
