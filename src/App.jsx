@@ -9,7 +9,7 @@ import wasmURL from "@ffmpeg/core/wasm?url";
 
 const ffmpeg = new FFmpeg();
 const MAX_THUMB_WIDTH = 640;
-const JPEG_QUALITY = 0.86;
+const DEFAULT_QUALITY_PERCENT = 85;
 
 export default function App() {
   const inputRef = useRef(null);
@@ -17,6 +17,7 @@ export default function App() {
   const ffmpegListenersAttachedRef = useRef(false);
   const [file, setFile] = useState(null);
   const [count, setCount] = useState(12);
+  const [qualityPercent, setQualityPercent] = useState(DEFAULT_QUALITY_PERCENT);
   const [status, setStatus] = useState("Drop a video to begin");
   const [thumbs, setThumbs] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -92,6 +93,15 @@ export default function App() {
     );
   }
 
+  function getCanvasQuality() {
+    return Math.min(1, Math.max(0.4, qualityPercent / 100));
+  }
+
+  function getFfmpegQualityValue() {
+    // FFmpeg MJPEG quality: 2 is best, 31 is worst.
+    return Math.round(31 - (qualityPercent / 100) * 29);
+  }
+
   async function safeDelete(path) {
     try {
       await ffmpeg.deleteFile(path);
@@ -138,6 +148,8 @@ export default function App() {
       count,
       duration,
       maxWidth: MAX_THUMB_WIDTH,
+      qualityPercent,
+      ffmpegQ: getFfmpegQualityValue(),
     });
 
     await ffmpeg.exec([
@@ -148,7 +160,7 @@ export default function App() {
       "-vf",
       `fps=${count}/${duration},scale='min(${MAX_THUMB_WIDTH},iw)':-2`,
       "-q:v",
-      "4",
+      String(getFfmpegQualityValue()),
       "-frames:v",
       String(count),
       "thumb_%02d.jpg",
@@ -166,6 +178,8 @@ export default function App() {
       count,
       duration,
       maxWidth: MAX_THUMB_WIDTH,
+      qualityPercent,
+      ffmpegQ: getFfmpegQualityValue(),
     });
 
     for (let i = 1; i <= count; i++) {
@@ -188,7 +202,7 @@ export default function App() {
         "-frames:v",
         "1",
         "-q:v",
-        "5",
+        String(getFfmpegQualityValue()),
         "-vf",
         `scale='min(${MAX_THUMB_WIDTH},iw)':-2`,
         name,
@@ -236,7 +250,7 @@ export default function App() {
     await seekPromise;
   }
 
-  function canvasToBlob(canvas) {
+  function canvasToBlob(canvas, quality) {
     return new Promise((resolve, reject) => {
       canvas.toBlob(
         (blob) => {
@@ -248,13 +262,20 @@ export default function App() {
           resolve(blob);
         },
         "image/jpeg",
-        JPEG_QUALITY
+        quality
       );
     });
   }
 
   async function extractWithCanvas(videoFile, duration, runId) {
-    debug(runId, "extract:canvas:start", { count, duration });
+    const canvasQuality = getCanvasQuality();
+
+    debug(runId, "extract:canvas:start", {
+      count,
+      duration,
+      qualityPercent,
+      canvasQuality,
+    });
 
     const video = document.createElement("video");
     const sourceURL = URL.createObjectURL(videoFile);
@@ -289,7 +310,7 @@ export default function App() {
         await seekVideo(video, timestamp);
 
         ctx.drawImage(video, 0, 0, width, height);
-        const blob = await canvasToBlob(canvas);
+        const blob = await canvasToBlob(canvas, canvasQuality);
         const url = URL.createObjectURL(blob);
 
         nextThumbs.push({ name, url });
@@ -314,6 +335,7 @@ export default function App() {
       fileSize: file.size,
       fileType: file.type,
       requestedThumbs: count,
+      qualityPercent,
     });
 
     setBusy(true);
@@ -443,11 +465,24 @@ export default function App() {
           <input
             type="range"
             min="4"
-            max="40"
+            max="128"
             value={count}
             onChange={(e) => setCount(Number(e.target.value))}
           />
           <b>{count}</b>
+        </label>
+
+        <label className="control">
+          <span>Quality (%)</span>
+          <input
+            type="range"
+            min="40"
+            max="100"
+            step="1"
+            value={qualityPercent}
+            onChange={(e) => setQualityPercent(Number(e.target.value))}
+          />
+          <b>{qualityPercent}%</b>
         </label>
 
         <button disabled={!file || busy} onClick={generate}>
