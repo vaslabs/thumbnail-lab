@@ -111,6 +111,19 @@ export default function App() {
     }
   }
 
+  function terminateFFmpeg(runId, reason) {
+    try {
+      ffmpeg.terminate();
+      ffmpegListenersAttachedRef.current = false;
+      debug(runId, "ffmpeg:terminated", { reason });
+    } catch (error) {
+      debug(runId, "ffmpeg:terminate:error", {
+        reason,
+        message: String(error?.message ?? error),
+      });
+    }
+  }
+
   async function readThumbsAndZip(outputNames, runId) {
     const zip = new JSZip();
     const nextThumbs = [];
@@ -326,6 +339,32 @@ export default function App() {
     }
   }
 
+  async function runFfmpegExtraction(inputName, duration, runId) {
+    setStatus("Reading video...");
+    debug(runId, "video:write:start", { inputName });
+    await loadFFmpeg();
+    debug(runId, "ffmpeg:loaded", { loaded: ffmpeg.loaded });
+    await ffmpeg.writeFile(inputName, await fetchFile(file));
+    debug(runId, "video:write:done", { inputName });
+
+    let outputNames = [];
+
+    try {
+      setStatus("Extracting thumbnails...");
+      outputNames = await extractBulk(inputName, duration, runId);
+    } catch (error) {
+      debug(runId, "extract:bulk:error", {
+        message: String(error?.message ?? error),
+      });
+      if (!isMemoryFailure(error)) throw error;
+
+      setStatus("Memory limit hit. Retrying in low-memory mode...");
+      outputNames = await extractSequential(inputName, duration, runId);
+    }
+
+    return readThumbsAndZip(outputNames, runId);
+  }
+
   async function generate() {
     if (!file) return;
 
@@ -355,30 +394,40 @@ export default function App() {
         setStatus("Extracting thumbnails with Canvas...");
         ({ nextThumbs, zip } = await extractWithCanvas(file, duration, runId));
       } else {
-        setStatus("Reading video...");
-        debug(runId, "video:write:start", { inputName });
-        await loadFFmpeg();
-        debug(runId, "ffmpeg:loaded", { loaded: ffmpeg.loaded });
-        await ffmpeg.writeFile(inputName, await fetchFile(file));
-        debug(runId, "video:write:done", { inputName });
+        let lastFfmpegError = null;
 
-        let outputNames = [];
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            if (attempt === 2) {
+              setStatus("Retrying with a fresh FFmpeg worker...");
+              debug(runId, "ffmpeg:retry", { attempt });
+            }
 
-        try {
-          setStatus("Extracting thumbnails...");
-          outputNames = await extractBulk(inputName, duration, runId);
-        } catch (error) {
-          debug(runId, "extract:bulk:error", {
-            message: String(error?.message ?? error),
-          });
-          if (!isMemoryFailure(error)) throw error;
+            ({ nextThumbs, zip } = await runFfmpegExtraction(
+              inputName,
+              duration,
+              runId
+            ));
+            lastFfmpegError = null;
+            break;
+          } catch (error) {
+            lastFfmpegError = error;
+            debug(runId, "extract:ffmpeg:attempt:error", {
+              attempt,
+              message: String(error?.message ?? error),
+            });
 
-          setStatus("Memory limit hit. Retrying in low-memory mode...");
-          outputNames = await extractSequential(inputName, duration, runId);
+            const shouldRetry = attempt === 1 && isMemoryFailure(error);
+            if (!shouldRetry) throw error;
+          } finally {
+            await safeDelete(inputName);
+            terminateFFmpeg(runId, `attempt-${attempt}-cleanup`);
+          }
         }
 
-        ({ nextThumbs, zip } = await readThumbsAndZip(outputNames, runId));
-        await safeDelete(inputName);
+        if (lastFfmpegError) {
+          throw lastFfmpegError;
+        }
       }
 
       setThumbs(nextThumbs);
@@ -455,13 +504,10 @@ export default function App() {
             />
             FFmpeg
           </label>
-          {engine === "ffmpeg" && (
-            <small>
-              FFmpeg in the browser can run out of memory on large or
-              high-bitrate videos. Switch to Canvas mode for better
-              reliability.
-            </small>
-          )}
+          <small>
+            Canvas is faster and more reliable in-browser. FFmpeg supports more
+            encodings and advanced processing, but it is usually slower.
+          </small>
         </fieldset>
 
         <div
